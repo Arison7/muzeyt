@@ -1,4 +1,4 @@
-use crate::ui::{compute_bars, draw_visualization};
+use crate::ui::{ draw_visualization};
 use crossterm::event::{self, Event, KeyEvent};
 use rodio::{OutputStream, Sink};
 use std::collections::VecDeque;
@@ -37,13 +37,11 @@ impl App {
         tokio::spawn({
             let buffer = buffer.clone();
 
-            let labels: Vec<String> = (0..BAR_COUNT).map(|i| i.to_string()).collect();
-
             //Initialize the Terminal
             let mut terminal = ratatui::init();
             async move {
                 loop {
-                    draw_visualization(&buffer, &mut terminal, &labels);
+                    draw_visualization(&buffer, &mut terminal);
 
                     tokio::time::sleep(Duration::from_millis(33)).await;
                 }

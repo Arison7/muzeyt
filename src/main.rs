@@ -37,10 +37,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn render(frame: &mut Frame) {
-    frame.render_widget("hello world", frame.area());
-}
-
 async fn spawn_input_task() -> Receiver<KeyEvent> {
     let (tx, rx) = mpsc::channel(32);
 
