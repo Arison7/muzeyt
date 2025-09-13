@@ -6,7 +6,6 @@ use std::sync::{Arc,Mutex};
 //use tokio::sync::Mutex;
 use std::collections::VecDeque;
 
-const BLOCK_SIZE: usize = 1024;
 
 pub fn initialize_stream() -> (Sink, OutputStream) {
     // _stream must live as long as the sink
@@ -19,7 +18,7 @@ pub fn initialize_stream() -> (Sink, OutputStream) {
 }
 
 
-pub fn append_song_from_file(path : &str, sink : &Sink, buffer : &Arc<Mutex<VecDeque<f32>>>) {
+pub fn append_song_from_file(path : &str, sink : &Sink, buffer : &Arc<Mutex<VecDeque<f32>>>) -> Duration {
     let file = BufReader::new(File::open(path).unwrap());
 
     let source = Decoder::try_from(file).unwrap();
@@ -29,8 +28,14 @@ pub fn append_song_from_file(path : &str, sink : &Sink, buffer : &Arc<Mutex<VecD
     // Wrap the audio source in our visualizer
     let vis_source = VisualizingSource::new(source, buffer.clone());
 
+    // Get the total duration of the source
+    let duration =  vis_source.total_duration().unwrap();
 
     sink.append(vis_source);
+
+    duration
+
+
 
 }
 
