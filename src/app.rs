@@ -5,6 +5,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+
 use crate::audio_stream::append_song_from_file;
 
 pub struct App {
@@ -22,7 +23,7 @@ impl App {
         // Shared buffer (Arc + Mutex so both threads can see it)
         let buffer = Arc::new(Mutex::new(VecDeque::new()));
         // let bars = precompute_bars("audio/song.mp3");
-        let total_duration = append_song_from_file("audio/song.mp3", &sink, &buffer);
+        let total_duration = append_song_from_file("audio/song.wav", &sink, &buffer);
 
         let sink = Arc::new(sink);
 
@@ -73,11 +74,21 @@ impl App {
             crossterm::event::KeyCode::Char('l') => {
                 if let Err(e) = self.sink.try_seek(self.sink.get_pos() + Duration::new(5,0)){ 
                     self.log_debug(e.to_string());
-
                 }
             },
             crossterm::event::KeyCode::Char('h') => {
-                self.sink.try_seek(self.sink.get_pos() - Duration::new(5,0));
+                let current = self.sink.get_pos();
+                let five_secs = Duration::new(5, 0);
+
+                let new_pos = if current > five_secs {
+                    current - five_secs
+                } else {
+                    Duration::ZERO
+                };
+
+                if let Err(e) = self.sink.try_seek(new_pos){ 
+                   self.log_debug(e.to_string());
+                }
             },
             _ => {}
         }

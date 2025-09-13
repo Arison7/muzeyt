@@ -43,7 +43,6 @@ pub fn compute_spectrum(samples: &[f32]) -> Vec<f32> {
         .map(|&m| (1.0 + m).log10())
         .map(|c| (c.re.powi(2) + c.im.powi(2)).sqrt())
         .collect();
-
     // collapse into BAR_COUNT groups (linear for now, could do log scale)
     let mut bars = Vec::with_capacity(BAR_COUNT);
     let bins_per_bar = mags.len() / BAR_COUNT;
@@ -103,7 +102,7 @@ pub fn draw_ui(
 
             // only render debug if not empty
             if !debug_lines.is_empty() {
-                let debug = build_debug_widget(debug_lines);
+                let debug = build_debug_widget(debug_lines,frame.area());
                 frame.render_widget(debug, chunks[2]);
             }
 

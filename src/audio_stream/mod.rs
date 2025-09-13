@@ -1,6 +1,8 @@
 use std::fs::File;
 use std::time::Duration;
-use rodio::{Decoder, OutputStream, Sink, Source, Sample};
+use rodio::{ OutputStream, Sink, Source,};
+use rodio::source::SeekError;
+use rodio::decoder::DecoderBuilder;
 use std::io::BufReader;
 use std::sync::{Arc,Mutex};
 //use tokio::sync::Mutex;
@@ -19,17 +21,21 @@ pub fn initialize_stream() -> (Sink, OutputStream) {
 
 
 pub fn append_song_from_file(path : &str, sink : &Sink, buffer : &Arc<Mutex<VecDeque<f32>>>) -> Duration {
-    let file = BufReader::new(File::open(path).unwrap());
+    let file = BufReader::new(File::open(path).expect("Incorrect file"));
 
-    let source = Decoder::try_from(file).unwrap();
+    let source = DecoderBuilder::new()
+        .with_data(file)
+        .with_seekable(true)
+        .build()
+        .unwrap();
     
-
-
     // Wrap the audio source in our visualizer
     let vis_source = VisualizingSource::new(source, buffer.clone());
 
     // Get the total duration of the source
     let duration =  vis_source.total_duration().unwrap();
+
+
 
     sink.append(vis_source);
 
@@ -93,4 +99,9 @@ where
     fn current_span_len(&self) -> Option<usize> {
         self.inner.current_span_len()
     }
+    fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError> {
+        self.inner.try_seek(pos)
+    }
 }
+
+
