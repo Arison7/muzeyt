@@ -1,11 +1,11 @@
 mod app;
 mod audio_stream;
 mod ui;
+mod file;
 
 
 use app::App;
 use crossterm::event::{self, Event, KeyEvent};
-use ratatui::Frame;
 use tokio::sync::mpsc::{self, Receiver};
 
 #[tokio::main]
@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         // Handle keys
         while let Ok(key) = rx.try_recv() {   // <-- non-blocking
-            app.handle_event(key).await?;
+            app.handle_event(key).await;
         }
 
 

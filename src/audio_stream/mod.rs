@@ -32,6 +32,7 @@ pub fn append_song_from_file(path : &str, sink : &Sink, buffer : &Arc<Mutex<VecD
     // Wrap the audio source in our visualizer
     let vis_source = VisualizingSource::new(source, buffer.clone());
 
+
     // Get the total duration of the source
     let duration =  vis_source.total_duration().unwrap();
 
