@@ -1,21 +1,27 @@
-use crossterm::event::{self, Event, KeyEvent};
-use rodio::{OutputStream, Sink};
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use tokio::sync::watch::{self, Receiver, Sender};
-
 use crate::audio_stream::append_song_from_file;
 use crate::file::SongSelector;
 use crate::ui::draw_home_screen;
 use crate::ui::file_selector::draw_song_list;
 use crate::ui::player::draw_player_ui;
+use crossterm::event::{self, Event, KeyEvent};
+use rodio::{OutputStream, Sink};
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+use std::thread::current;
+use std::time::Duration;
+use tokio::sync::mpsc;
+use tokio::sync::watch::{self, Receiver, Sender};
 
 #[derive(Debug, Clone, Copy)]
-enum Status {
+pub enum Status {
     Player,
     FileSelector,
     HomeScreen,
+}
+
+pub enum AppUpdate {
+    PlayNext,
+    PlayPrevious
 }
 
 #[derive(Debug, Clone)]
@@ -34,11 +40,18 @@ pub struct App {
     status_sender: Sender<Status>,
     selected_song_sender: Sender<usize>,
     current_song_sender: Sender<Song>,
+    update_sender: mpsc::Sender<AppUpdate>,
     song_selector: SongSelector,
+    song_duration: Duration,
+    watcher_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl App {
-    pub async fn new(sink: Sink, stream: OutputStream) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(
+        sink: Sink,
+        stream: OutputStream,
+        update_sender: mpsc::Sender<AppUpdate>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         // Shared buffer (Arc + Mutex so both threads can see it)
         let buffer = Arc::new(Mutex::new(VecDeque::new()));
         // Creates a new pointer to a sink so all threads can access it
@@ -62,7 +75,7 @@ impl App {
                 duration: Duration::ZERO,
             });
 
-        let song_selector = SongSelector::new("audio");
+        let song_selector = SongSelector::new("audio", 5);
 
         // Starts the main ui loop
         // has to run before the initialization of the app so that app can own its variables
@@ -75,7 +88,6 @@ impl App {
             selected_song_receiver,
             current_song_receiver,
             song_selector.songs.clone(),
-
         );
 
         Ok(App {
@@ -86,9 +98,12 @@ impl App {
             selected_song_sender,
             current_song_sender,
             song_selector,
+            update_sender,
             running: true,
             buffer,
             debug_lines,
+            song_duration: Duration::ZERO,
+            watcher_handle: None
         })
     }
     fn start_ui_loop(
@@ -118,13 +133,14 @@ impl App {
                         }
                         Status::Player => {
                             let current_progress = sink.get_pos(); // refresh inside loop
-                            let song  = current_song_receiver.borrow().clone();
+                            let song = current_song_receiver.borrow().clone();
                             draw_player_ui(
                                 &buffer,
                                 &mut terminal,
                                 song.duration,
                                 current_progress,
                                 &debug_lines,
+                                song.name,
                             );
                         }
                         Status::FileSelector => {
@@ -138,7 +154,25 @@ impl App {
             }
         });
     }
-    pub async fn handle_event(& mut self, event: KeyEvent) {
+    fn watch_for_sink_updates(&mut self) {
+        let sink = self.sink.clone();
+        let sender = self.update_sender.clone();
+        let handle = tokio::spawn(async move {
+            // Small delay between checks to avoid busy-waiting
+            let interval = tokio::time::Duration::from_millis(500);
+            loop {
+                if sink.empty() {
+                    sender.send(AppUpdate::PlayNext).await.unwrap();
+                    break;
+                }
+                tokio::time::sleep(interval).await;
+            }
+        });
+
+        self.watcher_handle = Some(handle);
+    }
+
+    pub async fn handle_event(&mut self, event: KeyEvent) {
         match self.status {
             Status::Player => {
                 match event.code {
@@ -154,6 +188,9 @@ impl App {
                     }
                     // Skip 5s
                     crossterm::event::KeyCode::Char('l') => {
+                        if self.sink.get_pos() + Duration::new(5, 0) >= self.song_duration {
+                            self.sink.clear();
+                        }
                         if let Err(e) = self
                             .sink
                             .try_seek(self.sink.get_pos() + Duration::new(5, 0))
@@ -166,6 +203,18 @@ impl App {
                         let current = self.sink.get_pos();
                         let five_secs = Duration::new(5, 0);
 
+                        if current < Duration::new(1,0){
+                            // Remove current watcher
+                            if let Some(handle) = &self.watcher_handle { 
+                                handle.abort();
+                            }
+                            // update app to play previous song
+                            self.update_sender.send(AppUpdate::PlayPrevious).await.unwrap();
+
+                            return;
+                        }
+
+
                         let new_pos = if current > five_secs {
                             current - five_secs
                         } else {
@@ -176,6 +225,13 @@ impl App {
                             self.log_debug(e.to_string());
                         }
                     }
+                    crossterm::event::KeyCode::Char('w') => {
+                        let sink = self.sink.clone();
+                        self.clear_debug();
+                        self.log_debug(sink.empty().to_string());
+                        self.log_debug(sink.get_pos().to_owned().as_secs().to_string());
+                    }
+
                     _ => {}
                 }
             }
@@ -197,15 +253,51 @@ impl App {
                     crossterm::event::KeyCode::Char('j') => self.next_file(),
                     // Previous file in the folder
                     crossterm::event::KeyCode::Char('k') => self.prev_file(),
-                    crossterm::event::KeyCode::Enter => self.play_current_song(),
+                    // Append to Queue
+                    crossterm::event::KeyCode::Char('a') => self.song_selector.queue_file(),
+                    // Play next
+                    crossterm::event::KeyCode::Char('n') => {
+                        self.sink.clear();
+                    }
+
+                    crossterm::event::KeyCode::Enter => self.play_current_file(),
                     _ => {}
                 }
+            }
+        }
+    }
+    pub fn handle_updates(&mut self, update: AppUpdate) {
+        match update {
+            AppUpdate::PlayNext => {
+                self.log_debug("playing next".to_owned());
+                if let Some(song) = self.song_selector.get_next_song() {
+                    self.play_song(song);
+                } else {
+                    self.update_status(Status::FileSelector);
+                }
+            }
+            AppUpdate::PlayPrevious => { 
+                self.log_debug("playing previous".to_owned());
+                if let Some(song) = self.song_selector.get_previous_song() {
+                    self.clear_debug();
+                    self.log_debug(song.clone());
+                    self.sink.clear();
+                    self.play_song(song);
+                } else {
+                    self.clear_debug();
+                    self.log_debug("no songs in the queue".to_owned());
+                }
+
             }
         }
     }
     fn log_debug(&self, message: String) {
         let mut lines = self.debug_lines.lock().unwrap();
         lines.push(message);
+    }
+    fn clear_debug(&self) {
+        let mut lines = self.debug_lines.lock().unwrap();
+        lines.clear();
     }
 
     fn update_status(&mut self, new_status: Status) {
@@ -215,7 +307,7 @@ impl App {
         }
     }
     fn next_file(&mut self) {
-        self.song_selector.next();
+        self.song_selector.next_file();
         if let Err(e) = self
             .selected_song_sender
             .send(self.song_selector.get_selected())
@@ -224,7 +316,7 @@ impl App {
         }
     }
     fn prev_file(&mut self) {
-        self.song_selector.prev();
+        self.song_selector.prev_file();
         if let Err(e) = self
             .selected_song_sender
             .send(self.song_selector.get_selected())
@@ -232,22 +324,33 @@ impl App {
             self.log_debug(e.to_string());
         }
     }
-    fn play_current_song(& mut self) {
+
+    fn play_current_file(&mut self) {
+        self.update_status(Status::Player);
+        let song_name = self.song_selector.get_song().to_owned();
+        self.play_song(song_name);
+    }
+    // Play song, by file name
+    // NOTE:: I don't like concept of passing everything by name of the file, however for the
+    // purpose of this app it will have to safise
+    fn play_song(&mut self, song: String) {
         let sink = self.sink.clone();
         let buffer = self.buffer.clone();
-        self.update_status(Status::Player);
-        let mut song_name = self.song_selector.get_song();
+        let mut song_name: &str = &song;
         let total_duration =
             append_song_from_file(("audio/".to_owned() + song_name).as_str(), &sink, &buffer);
         // Remove the extension
         if let Some(pos) = song_name.rfind('.') {
             song_name = &song_name[..pos];
         }
+        self.song_duration = total_duration;
         if let Err(e) = self.current_song_sender.send(Song {
             duration: total_duration,
             name: song_name.to_owned(),
         }) {
             self.log_debug(e.to_string());
         }
+        self.watch_for_sink_updates();
+
     }
 }

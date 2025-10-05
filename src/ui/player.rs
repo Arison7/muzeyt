@@ -65,6 +65,7 @@ pub fn draw_player_ui(
     total_duration: Duration,
     current_progress: Duration,
     debug_lines: &Arc<Mutex<Vec<String>>>,
+    name: String
 ) {
     let debug_lines : Vec<String> = {
         let unlocked = debug_lines.lock().unwrap();
@@ -95,7 +96,7 @@ pub fn draw_player_ui(
             frame.render_widget(gauge, chunks[0]);
 
             // visualization
-            let chart = build_visualization(buffer);
+            let chart = build_visualization(buffer,name);
             frame.render_widget(chart, chunks[1]);
 
             // only render debug if not empty
@@ -127,7 +128,7 @@ fn build_progress_bar(
         ))
 }
 
-fn build_visualization(buffer: &Arc<Mutex<VecDeque<f32>>>) -> impl ratatui::prelude::Widget {
+fn build_visualization(buffer: &Arc<Mutex<VecDeque<f32>>>, name: String) -> impl ratatui::prelude::Widget {
     let bars = {
         let buf = buffer.lock().unwrap();
         let samples: Vec<f32> = buf.iter().cloned().collect();
@@ -137,7 +138,7 @@ fn build_visualization(buffer: &Arc<Mutex<VecDeque<f32>>>) -> impl ratatui::prel
     let data: Vec<(&str, u64)> = bars.iter().map(|v| ("", (v * 100.0) as u64)).collect();
 
     BarChart::default()
-        .block(Block::default().title("Now Playing").borders(Borders::ALL))
+        .block(Block::default().title(name).borders(Borders::ALL))
         .data(&data)
         .value_style(Style::reset().bg(Color::White))
         .bar_width(1)
