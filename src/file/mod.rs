@@ -1,67 +1,22 @@
 use std::fs;
-use std::vec;
-use std::collections::VecDeque;
 
 
-pub struct SongSelector{
-    pub songs : Vec<String>, 
-    selected : usize,
-    current: Option<usize>,
-    back: VecDeque<usize>,
-    forward: VecDeque<usize>,
-    back_limit: usize,
+pub fn read_files(folder: &str) -> Vec<String> {
+    fs::read_dir(folder)
+        .unwrap()
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let path = entry.path();
+            if path.is_file() {
+                path.file_name().map(|n| n.to_string_lossy().to_string())
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
-impl SongSelector {
-    pub fn new(folder: &str, back_limit: usize) -> Self {
-        let songs = fs::read_dir(folder)
-            .unwrap()
-            .filter_map(|entry| {
-                let entry = entry.ok()?;
-                let path = entry.path();
-                if path.is_file() {
-                    path.file_name().map(|n| n.to_string_lossy().to_string())
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        Self { songs, selected: 0,
-            current: None,
-            back: VecDeque::with_capacity(back_limit),
-            forward: VecDeque::new(),
-            back_limit,
-        }
-    }
-
-    pub fn next_file(&mut self) {
-        if !self.songs.is_empty() {
-            self.selected = (self.selected + 1) % self.songs.len();
-        }
-    }
-
-    pub fn prev_file(&mut self) {
-        if !self.songs.is_empty() {
-            if self.selected == 0 {
-                self.selected = self.songs.len() - 1;
-            } else {
-                self.selected -= 1;
-            }
-        }
-    }
-
-    // Simple getter so selected cannot be modified from the outside
-    pub fn get_selected(&self ) -> usize {
-        self.selected
-    }
-    pub fn get_song(&mut self) -> &str{
-        self.current = Some(self.selected);
-        self.songs[self.selected].as_str()
-        
-    }
-
-
+    /*
     // Returns first song from the top of the queue and updates current
     pub fn get_next_song(&mut self) -> Option<String> { 
         if let Some(selector) =  self.forward.pop_front() {
@@ -93,6 +48,5 @@ impl SongSelector {
         self.forward.push_back(self.selected);
     }
     
-
-}
+*/
 
