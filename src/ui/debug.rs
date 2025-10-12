@@ -1,24 +1,46 @@
 use ratatui::{
-    widgets::{Paragraph,Block,Borders,Wrap},
-    text::Span,
-    prelude::*
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, Paragraph, Wrap},
 };
+use std::collections::VecDeque;
 
+pub fn draw_debug_panel(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    debug_lines: &VecDeque<String>,
+) -> Option<Rect> {
+    if debug_lines.is_empty() {
+        return None;
+    }
 
+    // compute height dynamically (up to 8)
+    let height = debug_lines.len().min(8) as u16;
 
-pub fn build_debug_widget(lines: Vec<String>, area: Rect) -> Paragraph<'static> {
-    // Limit number of lines to the height of the frame
-    let max_lines = area.height as usize;
-    let visible_lines: Vec<Line> = lines
+    // split area into main + debug sections
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(0),
+            Constraint::Length(height + 2), // +2 for borders
+        ])
+        .split(area);
+
+    // build visible lines
+    let lines: Vec<Line> = debug_lines
         .iter()
-        .rev() // take last lines
-        .take(max_lines)
-        .rev() // maintain original order
-        .map(|line| Line::from(Span::styled(line.clone(), Style::default().fg(Color::Yellow))))
+        .take(height as usize)
+        .rev()
+        .map(|line| Line::from(Span::styled(line, Style::default().fg(Color::Yellow))))
         .collect();
 
-    Paragraph::new(visible_lines)
+    let widget = Paragraph::new(lines)
         .block(Block::default().title("Debug").borders(Borders::ALL))
-        .wrap(Wrap { trim: true }) // enable wrapping
+        .wrap(Wrap { trim: true });
+
+    frame.render_widget(widget, chunks[1]);
+
+    Some(chunks[0]) // return the remaining (main) area
 }
 

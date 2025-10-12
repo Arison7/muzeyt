@@ -1,17 +1,16 @@
 use ratatui::{
-    layout::Alignment,
     prelude::*,
     style::{Color, Style},
     widgets::{BarChart, Block, Borders, Gauge},
-    Terminal,
 };
-use super::debug::build_debug_widget;
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use crate::ui::keybinds_panel::{draw_keybinds_panel, keybinds_height};
 
+use super::keybinds_panel::draw_show_keybinds_border;
 pub const BAR_COUNT: usize = 64;
 
 /// Collapse raw samples into N bars by grouping + averaging energy.
@@ -61,52 +60,58 @@ pub fn compute_spectrum(samples: &[f32]) -> Vec<f32> {
 
 pub fn draw_player_ui(
     buffer: &Arc<Mutex<VecDeque<f32>>>,
-    terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
+    frame: &mut Frame,
+    area: Rect,
     total_duration: Duration,
     current_progress: Duration,
-    debug_lines: &Arc<Mutex<Vec<String>>>,
-    name: String
+    name: String,
+    show_keybinds: bool,
 ) {
-    let debug_lines : Vec<String> = {
-        let unlocked = debug_lines.lock().unwrap();
-        unlocked.clone()
+    let mut keybinds: Option<[(&str, &str); 9]> = None;
+
+    if show_keybinds {
+        keybinds = Some([
+            ("p", "Play / Pause"),
+            ("l", "Skip +5s"),
+            ("h", "Rewind -5s"),
+            ("n", "Next"),
+            ("b", "Previous"),
+            ("f", "Open file selection"),
+            ("c", "Queue"),
+            ("q", "Quit"),
+            ("?", "Hide this message"),
+        ]);
+    }
+    // Layout: progress bar, visualization, keybinds
+    let constraints = {
+        vec![
+            Constraint::Length(3), // progress bar
+            Constraint::Min(0),    // waveform visualization
+            Constraint::Length(keybinds_height(keybinds, frame.area().width)), // keybinds section
+        ]
     };
-    terminal
-        .draw(|frame| {
-            let constraints = if debug_lines.is_empty() {
-                vec![
-                    Constraint::Length(3), // progress
-                    Constraint::Min(0),    // visualization
-                ]
-            } else {
-                vec![
-                    Constraint::Length(3), // progress
-                    Constraint::Min(0),    // visualization
-                    Constraint::Length(5), // debug panel
-                ]
-            };
 
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints(constraints)
-                .split(frame.area());
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(constraints)
+        .split(area);
 
-            // progress bar
-            let gauge = build_progress_bar(total_duration, current_progress);
-            frame.render_widget(gauge, chunks[0]);
+    // (1) Progress bar
+    let gauge = build_progress_bar(total_duration, current_progress);
+    frame.render_widget(gauge, chunks[0]);
 
-            // visualization
-            let chart = build_visualization(buffer,name);
-            frame.render_widget(chart, chunks[1]);
+    // (2) Visualization
+    let chart = build_visualization(buffer, name);
+    frame.render_widget(chart, chunks[1]);
 
-            // only render debug if not empty
-            if !debug_lines.is_empty() {
-                let debug = build_debug_widget(debug_lines,frame.area());
-                frame.render_widget(debug, chunks[2]);
-            }
-
-        })
-        .unwrap();
+    // (3) Keybinds
+    if show_keybinds {
+        // Since we are gurentee to have an array if show_keybinds is true we can unwrap
+        // here
+        draw_keybinds_panel(frame, chunks[2], " Player Controls ", &keybinds.unwrap());
+    } else {
+        draw_show_keybinds_border(frame, chunks[2]);
+    }
 }
 
 fn build_progress_bar(
@@ -128,7 +133,10 @@ fn build_progress_bar(
         ))
 }
 
-fn build_visualization(buffer: &Arc<Mutex<VecDeque<f32>>>, name: String) -> impl ratatui::prelude::Widget {
+fn build_visualization(
+    buffer: &Arc<Mutex<VecDeque<f32>>>,
+    name: String,
+) -> impl ratatui::prelude::Widget {
     let bars = {
         let buf = buffer.lock().unwrap();
         let samples: Vec<f32> = buf.iter().cloned().collect();

@@ -1,20 +1,22 @@
 use crate::audio_stream::append_song_from_file;
 use crate::file::read_files;
+use crate::ui::debug::draw_debug_panel;
 use crate::ui::draw_home_screen;
 use crate::ui::file_selector::draw_file_selector_ui;
-use crate::ui::queue::draw_queue_view;
-use crate::ui::queue_preview::draw_queue_preview;
-use crate::ui::songs_list::draw_song_list;
 use crate::ui::player::draw_player_ui;
-use crate::utility::queue::{self, SongQueue};
+use crate::ui::playing_status::draw_now_playing_bar;
+use crate::ui::queue::draw_queue_view;
+use crate::utility::queue::SongQueue;
 use crate::utility::ListNavigator;
-use crossterm::event::{self, Event, KeyEvent};
-use rodio::{OutputStream, Sink};
+use crossterm::event::KeyEvent;
+use rodio::Sink;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::join;
 use tokio::sync::mpsc;
+
+const MAX_DEBUG_LINES: usize = 100;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
@@ -42,6 +44,8 @@ pub enum UiUpdate {
     CurrentSong(Song),
     Songs(Vec<String>),
     Queue(Vec<String>),
+    ShowKeybinds,
+    DebugMessage(String),
 }
 
 pub struct App {
@@ -49,7 +53,6 @@ pub struct App {
     pub status: Status,
     pub running: bool,
     buffer: Arc<Mutex<VecDeque<f32>>>,
-    debug_lines: Arc<Mutex<Vec<String>>>,
     app_update_sender: mpsc::Sender<AppUpdate>,
     ui_update_sender: mpsc::Sender<UiUpdate>,
     navigator: Option<ListNavigator<String>>,
@@ -68,35 +71,12 @@ impl App {
         let buffer = Arc::new(Mutex::new(VecDeque::new()));
         // Creates a new pointer to a sink so all threads can access it
         let sink = Arc::new(sink);
-
-        // Creates a new innerly mutable pointer to Vector which is gonna store debug lines
-        // Not the most efficient way of doing it probably, but this is for debuging so I think
-        // it's alright
-        // TODO: Change in into the channel
-        let debug_lines: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
-
         // Channel for updating Ui
         let (ui_update_sender, ui_update_receiver) = mpsc::channel(32);
 
-        /*
-        // Updates for ui_loop about the app status
-        let (status_sender, status_receiver) = watch::channel(Status::HomeScreen);
-
-        // Updates for ui_lopp about selected song in the file system
-        let (selected_song_sender, selected_song_receiver) = watch::channel(0);
-
-        // Provides details of current song to the player
-        let (current_song_sender, current_song_receiver): (Sender<Song>, Receiver<Song>) =
-            watch::channel(Song {
-                name: "unkown".to_string(),
-                duration: Duration::ZERO,
-            });
-        */
-
         // Starts the main ui loop
         // has to run before the initialization of the app so that app can own its variables
-        // NOTE: I don't like cloing the songs here
-        App::start_ui_loop(&buffer, &sink, &debug_lines, ui_update_receiver);
+        App::start_ui_loop(&buffer, &sink, ui_update_receiver);
 
         Ok(App {
             sink,
@@ -106,7 +86,6 @@ impl App {
             navigator: None,
             running: true,
             buffer,
-            debug_lines,
             song_duration: Duration::ZERO,
             watcher_handle: None,
             previous_status: None,
@@ -116,13 +95,11 @@ impl App {
     fn start_ui_loop(
         buffer: &Arc<Mutex<VecDeque<f32>>>,
         sink: &Arc<Sink>,
-        debug_lines: &Arc<Mutex<Vec<String>>>,
         mut update_receiver: mpsc::Receiver<UiUpdate>,
     ) {
         tokio::spawn({
             let buffer = buffer.clone();
             let sink = sink.clone();
-            let debug_lines = debug_lines.clone();
             //Initialize the Terminal
             let mut terminal = ratatui::init();
 
@@ -132,11 +109,13 @@ impl App {
                 let mut queue: Vec<String> = vec![];
                 let mut selected_index = 0;
                 let mut current_song = Song {
-                    name: "Unkown".to_owned(),
+                    name: "No song selected".to_owned(),
                     duration: Duration::ZERO,
                 };
+                let mut show_keybinds = false;
                 // Force first draw
                 let mut dirty = true;
+                let mut debug_messages: VecDeque<String> = VecDeque::new();
                 loop {
                     while let Ok(update) = update_receiver.try_recv() {
                         match update {
@@ -160,32 +139,71 @@ impl App {
                                 current_song = song;
                                 dirty = true;
                             }
+                            UiUpdate::ShowKeybinds => {
+                                show_keybinds = !show_keybinds;
+                                dirty = true;
+                            }
+                            UiUpdate::DebugMessage(message) => {
+                                debug_messages.push_front(message);
+                                // Incase a lot of messages is being send we don't want to take too
+                                // much memory
+                                if debug_messages.len() > MAX_DEBUG_LINES {
+                                    debug_messages.pop_back();
+                                }
+                                dirty = true;
+                            }
                         }
                     }
                     if dirty || (status == Status::Player) {
-                        match status {
-                            Status::HomeScreen => {
-                                draw_home_screen(&mut terminal);
-                            }
-                            Status::Player => {
-                                let current_progress = sink.get_pos(); // refresh inside loop
-                                draw_player_ui(
-                                    &buffer,
-                                    &mut terminal,
-                                    current_song.duration,
-                                    current_progress,
-                                    &debug_lines,
-                                    current_song.name.clone(),
-                                );
-                            }
-                            Status::FileSelector => {
-                                //draw_song_list(&mut terminal, &songs, "songs", selected_index);
-                                draw_file_selector_ui(&mut terminal, &songs, &queue, selected_index, true);
-                            }
-                            Status::Queue => {
-                                draw_queue_view(&mut terminal, &queue, selected_index, true);
-                            }
-                        }
+                        terminal
+                            .draw(|frame| {
+                                let mut area = frame.area();
+
+                                // let debug handle its own rendering
+                                if let Some(main_area) =
+                                    draw_debug_panel(frame, area, &debug_messages)
+                                {
+                                    area = main_area; // shrink main area if debug visible
+                                }
+
+                                // On every view expect of player display top bar
+                                // "now playing" if current song has duration different than 0
+                                if status != Status::Player
+                                    && current_song.duration != Duration::ZERO
+                                {
+                                    area = draw_now_playing_bar(frame, area, &current_song.name);
+                                }
+
+                                // --- Draw main content ---
+                                match status {
+                                    Status::HomeScreen => draw_home_screen(frame, area),
+                                    Status::Player => draw_player_ui(
+                                        &buffer,
+                                        frame,
+                                        area,
+                                        current_song.duration,
+                                        sink.get_pos(),
+                                        current_song.name.clone(),
+                                        show_keybinds,
+                                    ),
+                                    Status::FileSelector => draw_file_selector_ui(
+                                        frame,
+                                        area,
+                                        &songs,
+                                        &queue,
+                                        selected_index,
+                                        show_keybinds,
+                                    ),
+                                    Status::Queue => draw_queue_view(
+                                        frame,
+                                        area,
+                                        &queue,
+                                        selected_index,
+                                        show_keybinds,
+                                    ),
+                                }
+                            })
+                            .unwrap();
                         dirty = false;
                     }
 
@@ -235,7 +253,7 @@ impl App {
                             .sink
                             .try_seek(self.sink.get_pos() + Duration::new(5, 0))
                         {
-                            self.log_debug(e.to_string());
+                            self.log_debug(e.to_string()).await;
                         }
                     }
                     // Go back 5s
@@ -264,16 +282,23 @@ impl App {
                         };
 
                         if let Err(e) = self.sink.try_seek(new_pos) {
-                            self.log_debug(e.to_string());
+                            self.log_debug(e.to_string()).await;
                         }
                     }
-                    crossterm::event::KeyCode::Char('w') => {
-                        let sink = self.sink.clone();
-                        self.clear_debug();
-                        self.log_debug(sink.empty().to_string());
-                        self.log_debug(sink.get_pos().to_owned().as_secs().to_string());
+                    // Play next
+                    crossterm::event::KeyCode::Char('n') => {
+                        let _ = self.app_update_sender.send(AppUpdate::PlayNext).await;
                     }
-
+                    // Play previous
+                    crossterm::event::KeyCode::Char('b') => {
+                        let _ = self.app_update_sender.send(AppUpdate::PlayPrevious).await;
+                    }
+                    crossterm::event::KeyCode::Char('f') => {
+                        self.update_status(Status::FileSelector).await;
+                    }
+                    crossterm::event::KeyCode::Char('c') => {
+                        self.update_status(Status::Queue).await;
+                    }
                     _ => {}
                 }
             }
@@ -315,7 +340,6 @@ impl App {
                     crossterm::event::KeyCode::Char('a') => {
                         // Create queue if doesn't exist
                         if let Some(nav) = &self.navigator {
-                            self.log_debug("nav found".to_owned());
                             let queue = self.song_queue.get_or_insert_with(|| SongQueue::new(5));
                             // queue the file
                             queue.queue_file(nav.get_selected().clone());
@@ -330,12 +354,17 @@ impl App {
                     crossterm::event::KeyCode::Char('n') => {
                         self.sink.clear();
                     }
-                    // TODO: Play previous
-                    //
-                    //
-                    //
+                    // Show queue
                     crossterm::event::KeyCode::Char('c') => {
                         self.update_status(Status::Queue).await;
+                    }
+                    // Start play from queue
+                    crossterm::event::KeyCode::Char('C') => {
+                        let _ = self.app_update_sender.send(AppUpdate::PlayNext).await;
+                    }
+                    // Show Player
+                    crossterm::event::KeyCode::Char('p') => {
+                        self.update_status(Status::Player).await;
                     }
 
                     crossterm::event::KeyCode::Enter => self.play_current_file().await,
@@ -361,7 +390,7 @@ impl App {
                                 queue.remove_forward(i);
                                 let songs = queue.collect_forward();
                                 // Update the queue using the previous index if possible, otherwise use 0
-                                let index = i.saturating_sub(1); 
+                                let index = i.saturating_sub(1);
                                 self.update_queue(songs, index).await;
                             }
                         }
@@ -376,7 +405,7 @@ impl App {
                                 .await;
                         }
                     }
-                    // mode up
+                    // move up
                     crossterm::event::KeyCode::Char('k') => {
                         if let Some(navigator) = &mut self.navigator {
                             navigator.prev();
@@ -388,7 +417,8 @@ impl App {
                     }
                     // move to the top of the queue
                     crossterm::event::KeyCode::Char('n') => {
-                        if let (Some(navigator), Some(queue)) = (&self.navigator, &mut self.song_queue)
+                        if let (Some(navigator), Some(queue)) =
+                            (&self.navigator, &mut self.song_queue)
                         {
                             let i = navigator.selected;
                             queue.push_to_front(i);
@@ -396,17 +426,34 @@ impl App {
                             self.update_queue(songs, i).await;
                         }
                     }
+                    crossterm::event::KeyCode::Char('f') => {
+                        self.update_status(Status::FileSelector).await;
+                    }
+                    crossterm::event::KeyCode::Char('p') => {
+                        self.update_status(Status::Player).await;
+                    }
+                    crossterm::event::KeyCode::Enter => {
+                        if let (Some(navigator), Some(queue)) =
+                            (&self.navigator, &mut self.song_queue)
+                        {
+                            let i = navigator.selected;
+                            queue.clear_to(i);
+                        }
+                        let _ = self.app_update_sender.send(AppUpdate::PlayNext).await;
+                        self.update_status(Status::Player).await;
+                    }
                     _ => {}
                 }
             }
+        }
+        if event.code == crossterm::event::KeyCode::Char('?') {
+            let _ = self.ui_update_sender.send(UiUpdate::ShowKeybinds).await;
         }
     }
     pub async fn handle_updates(&mut self, update: AppUpdate) {
         match update {
             AppUpdate::PlayNext => {
-                self.log_debug("playing next".to_owned());
                 // If there is a queue get a mutable reference and get the next song
-                // NOTE: very nice pattern
                 if let Some(song) = self
                     .song_queue
                     .as_mut()
@@ -414,32 +461,30 @@ impl App {
                 {
                     self.play_song(song).await;
                 } else {
+                    // This is a bit confusing ngl
+                    // TODO: Adds some message with it
                     self.update_status(Status::FileSelector).await;
                 }
             }
             AppUpdate::PlayPrevious => {
-                self.log_debug("playing previous".to_owned());
                 if let Some(song) = self
                     .song_queue
                     .as_mut()
-                    .and_then(|queue| queue.get_next_song())
+                    .and_then(|queue| queue.get_previous_song())
                 {
-                    self.sink.clear();
                     self.play_song(song).await;
                 } else {
-                    self.clear_debug();
-                    self.log_debug("no songs in the previous queue".to_owned());
+                    self.log_debug("no songs in the previous queue").await;
                 }
             }
         }
     }
-    fn log_debug(&self, message: String) {
-        let mut lines = self.debug_lines.lock().unwrap();
-        lines.push(message);
-    }
-    fn clear_debug(&self) {
-        let mut lines = self.debug_lines.lock().unwrap();
-        lines.clear();
+    async fn log_debug(&self, message: impl ToString) {
+        let msg = message.to_string();
+        let _ = self
+            .ui_update_sender
+            .send(UiUpdate::DebugMessage(msg))
+            .await;
     }
 
     async fn update_status(&mut self, new_status: Status) {
@@ -456,7 +501,7 @@ impl App {
                     .send(UiUpdate::Songs(songs.clone()))
                     .await
                 {
-                    self.log_debug(err.to_string());
+                    self.log_debug(err.to_string()).await;
                 }
                 // Create new navigator
                 self.navigator = Some(ListNavigator::new(songs));
@@ -471,10 +516,10 @@ impl App {
                     let (res_queue, res_index) = join!(send_queue, send_index);
 
                     if let Err(err) = res_queue {
-                        self.log_debug(err.to_string());
+                        self.log_debug(err.to_string()).await;
                     }
                     if let Err(err) = res_index {
-                        self.log_debug(err.to_string());
+                        self.log_debug(err.to_string()).await;
                     }
 
                     songs
@@ -501,7 +546,7 @@ impl App {
         navigator.selected = selected_index;
         self.navigator = Some(navigator);
 
-        let (res_queue, res_index) = join!(send_queue, send_index);
+        let (_res_queue, _res_index) = join!(send_queue, send_index);
     }
 
     async fn play_current_file(&mut self) {
@@ -511,6 +556,9 @@ impl App {
             .as_mut()
             .map(|nav| nav.get_selected().to_owned())
         {
+            if let Some(queue) = &mut self.song_queue {
+                queue.set_current(song_name.clone());
+            }
             self.play_song(song_name).await;
         }
     }
@@ -519,6 +567,8 @@ impl App {
     // purpose of this app it will have to safise
     async fn play_song(&mut self, song: String) {
         let sink = self.sink.clone();
+        sink.clear();
+        sink.play();
         let buffer = self.buffer.clone();
         let mut song_name: &str = &song;
         let total_duration =

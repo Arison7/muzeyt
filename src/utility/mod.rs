@@ -33,8 +33,5 @@ impl<T> ListNavigator<T> {
         &self.items[self.selected]
     }
 
-    pub fn reset_selection(&mut self) {
-        self.selected = 0;
-    }
 }
 

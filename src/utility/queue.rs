@@ -62,4 +62,17 @@ impl SongQueue {
             self.forward.push_front(item);
         }
     }
+    pub fn set_current(&mut self, current : String) { 
+        if let Some(current) = &self.current {
+            self.back.push_front(current.to_owned());
+        }
+        self.current = Some(current);
+    }
+    // Remove from queue until index is reached 
+    pub fn clear_to(&mut self, mut index:  usize) {
+        while index > 0 { 
+            self.forward.pop_front();
+            index -= 1;
+        }
+    }
 }

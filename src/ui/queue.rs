@@ -1,48 +1,47 @@
 // ui/queue_view.rs
-use ratatui::{prelude::*, Terminal};
-use ratatui::backend::CrosstermBackend;
-use std::io::Stdout;
-use crate::ui::{
-    songs_list::draw_song_list,
-    keybinds_panel::draw_keybinds_panel,
-};
+use super::keybinds_panel::draw_show_keybinds_border;
+use crate::ui::keybinds_panel::{draw_keybinds_panel, keybinds_height};
+use crate::ui::songs_list::draw_song_list;
+
+use ratatui::prelude::*;
 
 pub fn draw_queue_view(
-    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    frame: &mut Frame,
+    area: Rect,
     queue: &[String],
     selected_index: usize,
     show_keybinds: bool,
 ) {
-    terminal
-        .draw(|frame| {
-            let area = frame.area();
+    let mut keybinds: Option<[(&str, &str); 7]> = None;
 
-            // Vertical layout: queue list + keybinds
-            let chunks = if show_keybinds {
-                Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([Constraint::Min(5), Constraint::Length(5)])
-                    .split(area)
-            } else {
-                Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([Constraint::Min(5)])
-                    .split(area)
-            };
+    if show_keybinds {
+        keybinds = Some([
+            ("j/k", "Navigate"),
+            ("r", "Remove song"),
+            ("n", "Move to top"),
+            ("Enter", "Play now"),
+            ("f", "View files"),
+            ("p", "Player"),
+            ("q", "Exit queue"),
+        ]);
+    }
 
-            // (a) Queue list (reuse draw_song_list)
-            draw_song_list(frame, chunks[0], queue, " Queue ", selected_index);
+    // Vertical layout: queue list + keybinds
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(5),
+            Constraint::Length(keybinds_height(keybinds, frame.area().width)),
+        ])
+        .split(area);
 
-            // (b) Keybinds
-            if show_keybinds {
-                let keybinds = [
-                    ("j/k", "Navigate"),
-                    ("r", "Remove song"),
-                    ("n", "Move to top"),
-                    ("q", "Exit queue"),
-                ];
-                draw_keybinds_panel(frame, chunks[1], " Queue Keybinds ", &keybinds);
-            }
-        })
-        .unwrap();
+    // (a) Queue list (reuse draw_song_list)
+    draw_song_list(frame, chunks[0], queue, " Queue ", selected_index);
+
+    // (b) Keybinds
+    if show_keybinds {
+        draw_keybinds_panel(frame, chunks[1], " Queue Keybinds ", &keybinds.unwrap());
+    } else {
+        draw_show_keybinds_border(frame, chunks[1]);
+    }
 }

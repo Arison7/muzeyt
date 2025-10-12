@@ -1,7 +1,6 @@
 use ratatui::{
     prelude::*,
     widgets::{Block, Borders, List, ListItem, Padding},
-    Terminal,
 };
 
 
