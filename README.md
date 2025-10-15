@@ -62,7 +62,9 @@ While currently the app focues on its main purpose which is showcasing my skills
 
 
 
-## Current Issues/area of improvement
+## Current Issues/area of improvement 
+- [ ] App structure has too much responsibility, especially drawing ui should be done elsewhere
+- [ ] App updates should include the stopping of app instead of it being done seperately
 
 
 ## To Do
