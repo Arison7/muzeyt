@@ -60,7 +60,10 @@ While currently the app focues on its main purpose which is showcasing my skills
 
 
 
+## Generative AI usage
 
+These days AI is everywhere so I think it's important to adress how I have used it in this project. Aside from some minor queries the main usage of 
+Ai was the UI. I have to admit I am not much of a designer myself and it this area of creating simply layouts the AI did pretty good job. 
 
 ## Current Issues/area of improvement 
 - [ ] App structure has too much responsibility, especially drawing ui should be done elsewhere
