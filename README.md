@@ -66,12 +66,12 @@ While currently the app focues on its main purpose which is showcasing my skills
 
 
 ## To Do
-- [] Testing
-- [] Unloading app.rs 
-- [] Making previous song be visible in queue
-- [] Implement full file exploration
-- [] Implement starting with file as a flag (passing the file to the player)
-- [] Different file types with Symphonia
+- [ ] Testing
+- [ ] Unloading app.rs 
+- [ ] Making previous song be visible in queue
+- [ ] Implement full file exploration
+- [ ] Implement starting with file as a flag (passing the file to the player)
+- [ ] Different file types with Symphonia
 
 
 ## Author
