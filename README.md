@@ -73,13 +73,13 @@ While currently the app focues on its main purpose which is showcasing my skills
 Rust Developer and Systems Programming Enthusiast  
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/Arison7)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?logo=linkedin&logoColor=white)](https://linkedin.com/in/arison7)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?logo=linkedin&logoColor=white)]([https://linkedin.com/in/arison7](https://www.linkedin.com/in/%C5%82ukasz-krysmalski-13a9a721a/))
 [![Email](https://img.shields.io/badge/Email-lucaskrysmalski@gmail.com-D14836?logo=gmail&logoColor=white)](mailto:lucaskrysmalski@gmail.com)
 
 ---
 
 ## License
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **MIT License** — see the [LICENSE]([LICENSE](https://mit-license.org/)) file for details.
 
  
