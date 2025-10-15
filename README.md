@@ -83,7 +83,7 @@ Rust Developer and Systems Programming Enthusiast
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?logo=linkedin&logoColor=white)]([https://linkedin.com/in/arison7](https://www.linkedin.com/in/%C5%82ukasz-krysmalski-13a9a721a/))
 [![Email](https://img.shields.io/badge/Email-lucaskrysmalski@gmail.com-D14836?logo=gmail&logoColor=white)](mailto:lucaskrysmalski@gmail.com)
 
----
+
 
 ## License
 
