@@ -84,12 +84,14 @@ impl App {
             song_queue: None,
         })
     }
+    // Starts threat to watch over the duration of the song to play next one once it's over
     fn watch_for_sink_updates(&mut self) {
         let sink = self.sink.clone();
         let sender = self.app_update_sender.clone();
         let handle = tokio::spawn(async move {
             // Small delay between checks to avoid busy-waiting
             let interval = tokio::time::Duration::from_millis(500);
+            // If the current song is over (sink is empty) play the next one
             loop {
                 if sink.empty() {
                     sender.send(AppUpdate::PlayNext).await.unwrap();
@@ -98,7 +100,10 @@ impl App {
                 tokio::time::sleep(interval).await;
             }
         });
-
+        // clear previous handle
+        if let Some(previous_handle) = &self.watcher_handle {
+            previous_handle.abort();
+        }
         self.watcher_handle = Some(handle);
     }
 
