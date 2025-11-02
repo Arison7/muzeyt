@@ -2,6 +2,7 @@ use std::fs;
 
 
 pub fn read_files(folder: &str) -> Vec<String> {
+    //TODO: This should not just unwrap
     fs::read_dir(folder)
         .unwrap()
         .filter_map(|entry| {
