@@ -21,7 +21,7 @@ Originally the idea was to query songs from youtube music (thus the "yt" in the 
 youtube music api to play songs, this part of the project has been postpone for later till i can find a workaround. 
 While currently the app focues on its main purpose which is showcasing my skills rather than being an actual project
 
-
+## Usage (W.I.P)
 
 ## Features
 
@@ -67,17 +67,17 @@ Ai was the UI. I have to admit I am not much of a designer myself and it this ar
 it's a tool so personally I don't see anything against using it where it's useful. 
 
 ## Current Issues/area of improvement 
-- [ ] App structure has too much responsibility, especially drawing ui should be done elsewhere
+- [x] App structure has too much responsibility, especially drawing ui should be done elsewhere
 - [ ] App updates should include the stopping of app instead of it being done seperately
 
 
 ## To Do
 - [ ] Testing
-- [ ] Unloading app.rs 
+- [x] Unloading app.rs (partially, however I am still not super happy with it)
 - [ ] Making previous song be visible in queue
 - [ ] Implement full file exploration
 - [ ] Implement starting with file as a flag (passing the file to the player)
-- [ ] Different file types with Symphonia
+- [x] Different file types with Symphonia
 
 
 ## Author
@@ -95,4 +95,3 @@ Rust Developer and Systems Programming Enthusiast
 
 This project is licensed under the **MIT License** — see the [LICENSE]([LICENSE](https://mit-license.org/)) file for details.
 
- 
