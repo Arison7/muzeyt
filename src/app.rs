@@ -100,10 +100,6 @@ impl App {
                 tokio::time::sleep(interval).await;
             }
         });
-        // clear previous handle
-        if let Some(previous_handle) = &self.watcher_handle {
-            previous_handle.abort();
-        }
         self.watcher_handle = Some(handle);
     }
 
@@ -336,10 +332,12 @@ impl App {
                     .as_mut()
                     .and_then(|queue| queue.get_next_song())
                 {
+                    self.log_debug(format!("Playing next {}", song)).await;
                     self.play_song(song).await;
                 } else {
                     // This is a bit confusing ngl
                     // TODO: Adds some message with it
+                    self.log_debug("Song failed").await;
                     self.update_status(Status::FileSelector).await;
                 }
             }
@@ -368,6 +366,7 @@ impl App {
         // Previous status is only used for queue so we don't want to loop it
         self.previous_status = Some(self.status);
         self.status = new_status;
+        self.log_debug(format!("{:?}", new_status)).await;
         match new_status {
             Status::FileSelector => {
                 // Read all the files from folder
@@ -443,8 +442,17 @@ impl App {
     // NOTE:: I don't like concept of passing everything by name of the file, however for the
     // purpose of this app it will have to safise
     async fn play_song(&mut self, song: String) {
+        // clear previous handle
+        // This is important since appneding new song with Symphonia takes a moment
+        // so there is time where the sink is empty during processing
+        // which causes auto skipping
+        if let Some(previous_handle) = &self.watcher_handle {
+            previous_handle.abort();
+        }
         let sink = self.sink.clone();
+        // Clears sink, but also pauses it
         sink.clear();
+        // Resumes the playing
         sink.play();
         let buffer = self.buffer.clone();
         let mut song_name: &str = &song;
