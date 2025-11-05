@@ -22,6 +22,7 @@ pub enum Status {
 pub enum AppUpdate {
     PlayNext,
     PlayPrevious,
+    Quit,
 }
 #[derive(Debug, Clone)]
 pub struct Song {
@@ -108,7 +109,9 @@ impl App {
             Status::Player => {
                 match event.code {
                     // Quit
-                    crossterm::event::KeyCode::Char('q') => self.running = false,
+                    crossterm::event::KeyCode::Char('q') => {
+                        let _ = self.app_update_sender.send(AppUpdate::Quit).await;
+                    }
                     // Pause
                     crossterm::event::KeyCode::Char('p') => {
                         if self.sink.is_paused() {
@@ -178,7 +181,9 @@ impl App {
             Status::HomeScreen => {
                 match event.code {
                     // Quit
-                    crossterm::event::KeyCode::Char('q') => self.running = false,
+                    crossterm::event::KeyCode::Char('q') => {
+                        let _ = self.app_update_sender.send(AppUpdate::Quit).await;
+                    }
                     crossterm::event::KeyCode::Char('f') => {
                         self.update_status(Status::FileSelector).await;
                     }
@@ -188,7 +193,9 @@ impl App {
             Status::FileSelector => {
                 match event.code {
                     // Quit
-                    crossterm::event::KeyCode::Char('q') => self.running = false,
+                    crossterm::event::KeyCode::Char('q') => {
+                        let _ = self.app_update_sender.send(AppUpdate::Quit).await;
+                    }
                     // Next file in the folder
                     crossterm::event::KeyCode::Char('j') => {
                         if let Some(navigator) = &mut self.navigator {
@@ -252,7 +259,7 @@ impl App {
                             self.update_status(previous_status).await;
                         }
                         _ => {
-                            self.running = false;
+                            let _ = self.app_update_sender.send(AppUpdate::Quit).await;
                         }
                     },
                     // remove element from the queue
@@ -351,6 +358,9 @@ impl App {
                 } else {
                     self.log_debug("no songs in the previous queue").await;
                 }
+            }
+            AppUpdate::Quit => {
+                self.running = false;
             }
         }
     }
