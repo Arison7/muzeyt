@@ -1,9 +1,8 @@
 mod app;
 mod audio_stream;
-mod ui;
 mod file;
+mod ui;
 mod utility;
-
 
 use app::App;
 use app::AppUpdate;
@@ -12,7 +11,6 @@ use tokio::sync::mpsc::{self, Receiver};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-
     let (sink, _stream) = audio_stream::initialize_stream();
 
     let (update_sender, mut update_receiver) = tokio::sync::mpsc::channel::<AppUpdate>(32);
@@ -21,23 +19,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut input_receiver = spawn_input_task().await;
 
-
-
     // main loop
     loop {
         // Handle keys
-        while let Ok(key) = input_receiver.try_recv() {   // <-- non-blocking
+        while let Ok(key) = input_receiver.try_recv() {
+            // non-blocking
             app.handle_event(key).await;
         }
 
-
         // Handle updates
-        if !app.running {
-            break;
-        }
-
         while let Ok(update) = update_receiver.try_recv() {
             app.handle_updates(update).await;
+        }
+        if !app.running {
+            break;
         }
     }
 
@@ -60,4 +55,3 @@ async fn spawn_input_task() -> Receiver<KeyEvent> {
 
     rx
 }
-
