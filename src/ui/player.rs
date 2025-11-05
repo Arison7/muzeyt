@@ -11,13 +11,13 @@ use std::time::Duration;
 use crate::ui::keybinds_panel::{draw_keybinds_panel, keybinds_height};
 
 use super::keybinds_panel::draw_show_keybinds_border;
-pub const BAR_COUNT: usize = 64;
+//pub const BAR_COUNT: usize = 64;
 
 /// Collapse raw samples into N bars by grouping + averaging energy.
-/// TODO: put this in proper place
-pub fn compute_spectrum(samples: &[f32]) -> Vec<f32> {
+pub fn compute_spectrum(samples: &[f32], width: u16) -> Vec<f32> {
+    let bar_count = (width / 2) as usize;
     if samples.is_empty() {
-        return vec![0.0; BAR_COUNT];
+        return vec![0.0; bar_count];
     }
 
     // prepare FFT
@@ -41,9 +41,9 @@ pub fn compute_spectrum(samples: &[f32]) -> Vec<f32> {
         .map(|c| (c.re.powi(2) + c.im.powi(2)).sqrt())
         .collect();
     // collapse into BAR_COUNT groups (linear for now, could do log scale)
-    let mut bars = Vec::with_capacity(BAR_COUNT);
-    let bins_per_bar = mags.len() / BAR_COUNT;
-    for i in 0..BAR_COUNT {
+    let mut bars = Vec::with_capacity(bar_count);
+    let bins_per_bar = mags.len() / bar_count;
+    for i in 0..bar_count {
         let start = i * bins_per_bar;
         let end = ((i + 1) * bins_per_bar).min(mags.len());
         let chunk = &mags[start..end];
@@ -101,7 +101,7 @@ pub fn draw_player_ui(
     frame.render_widget(gauge, chunks[0]);
 
     // (2) Visualization
-    let chart = build_visualization(buffer, name);
+    let chart = build_visualization(buffer, name, area.width);
     frame.render_widget(chart, chunks[1]);
 
     // (3) Keybinds
@@ -136,14 +136,16 @@ fn build_progress_bar(
 fn build_visualization(
     buffer: &Arc<Mutex<VecDeque<f32>>>,
     name: String,
+    width: u16,
 ) -> impl ratatui::prelude::Widget {
     let bars = {
         let buf = buffer.lock().unwrap();
         let samples: Vec<f32> = buf.iter().cloned().collect();
-        compute_spectrum(&samples)
+        compute_spectrum(&samples, width)
     };
 
     let data: Vec<(&str, u64)> = bars.iter().map(|v| ("", (v * 100.0) as u64)).collect();
+    // Make sure the bars fill the screen
 
     BarChart::default()
         .block(Block::default().title(name).borders(Borders::ALL))
