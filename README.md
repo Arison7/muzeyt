@@ -78,6 +78,7 @@ it's a tool so personally I don't see anything against using it where it's usefu
 - [ ] Implement full file exploration
 - [ ] Implement starting with file as a flag (passing the file to the player)
 - [x] Different file types with Symphonia
+- [ ] Ui scalling with bigger terminals
 
 
 ## Author
