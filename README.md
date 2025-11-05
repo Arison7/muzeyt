@@ -68,7 +68,7 @@ it's a tool so personally I don't see anything against using it where it's usefu
 
 ## Current Issues/area of improvement 
 - [x] App structure has too much responsibility, especially drawing ui should be done elsewhere
-- [ ] App updates should include the stopping of app instead of it being done seperately
+- [x] App updates should include the stopping of app instead of it being done seperately
 
 
 ## To Do
