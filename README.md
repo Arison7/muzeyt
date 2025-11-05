@@ -73,7 +73,7 @@ it's a tool so personally I don't see anything against using it where it's usefu
 
 ## To Do
 - [ ] Testing
-- [x] Unloading app.rs (partially, however I am still not super happy with it)
+- [x] Unloading app.rs
 - [ ] Making previous song be visible in queue
 - [ ] Implement full file exploration
 - [ ] Implement starting with file as a flag (passing the file to the player)
