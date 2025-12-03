@@ -46,6 +46,7 @@ pub struct App {
     pub sink: Arc<Sink>,
     pub status: Status,
     pub running: bool,
+    path: String,
     buffer: Arc<Mutex<VecDeque<f32>>>,
     app_update_sender: mpsc::Sender<AppUpdate>,
     ui_update_sender: mpsc::Sender<UiUpdate>,
@@ -57,26 +58,30 @@ pub struct App {
 }
 
 impl App {
+    /// # Creates new instance of App
+    ///
+    /// # Parameters
+    /// - `sink`: rodio sink
+    /// - `update_sender`: mspc::Sender resposnbile for sending app Updates
+    /// - `path` : path where songs are store
+    ///
+    /// # Returns
+    /// Ok(self) if creation  was successful
+    /// Err(std::error:Error) if unsuccessful
+    ///
     pub async fn new(
-        sink: Sink,
+        sink: Arc<Sink>,
         update_sender: mpsc::Sender<AppUpdate>,
+        path: String,
+        buffer: Arc<Mutex<VecDeque<f32>>>,
+        ui_update_sender: mpsc::Sender<UiUpdate>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        // Shared buffer (Arc + Mutex so both threads can see it)
-        let buffer = Arc::new(Mutex::new(VecDeque::new()));
-        // Creates a new pointer to a sink so all threads can access it
-        let sink = Arc::new(sink);
-        // Channel for updating Ui
-        let (ui_update_sender, ui_update_receiver) = mpsc::channel(32);
-
-        // Starts the main ui loop
-        // has to run before the initialization of the app so that app can own its variables
-        start_ui_loop(&buffer, &sink, ui_update_receiver);
-
         Ok(App {
             sink,
             status: Status::HomeScreen,
             app_update_sender: update_sender,
             ui_update_sender,
+            path,
             navigator: None,
             running: true,
             buffer,
@@ -155,7 +160,8 @@ impl App {
         match new_status {
             Status::FileSelector => {
                 // Read all the files from folder
-                let songs = read_files("audio");
+                // TODO : error system
+                let songs = read_files(&self.path).expect("failed to read folder");
                 // Update ui with the list of songs
                 if let Err(err) = self
                     .ui_update_sender
@@ -241,8 +247,11 @@ impl App {
         sink.play();
         let buffer = self.buffer.clone();
         let mut song_name: &str = &song;
-        let total_duration =
-            append_song_from_file(("audio/".to_owned() + song_name).as_str(), &sink, &buffer);
+        let total_duration = append_song_from_file(
+            (self.path.clone() + "/" + song_name).as_str(),
+            &sink,
+            &buffer,
+        );
         // Remove the extension
         if let Some(pos) = song_name.rfind('.') {
             song_name = &song_name[..pos];
@@ -260,10 +269,80 @@ impl App {
 }
 
 #[cfg(test)]
-mod app_core_tests {
-    use super::*;
+mod tests {
 
-    #[test]
-    // Testing if there are songs to perform tests on
-    fn test_songs_present() {}
+    use crate::audio_stream;
+    use crate::file;
+
+    use super::*;
+    const TEST_AUDIO_PATH: &str = "test_audio";
+
+    async fn initialize_app() -> Result<(App, mpsc::Receiver<AppUpdate>), Box<dyn std::error::Error>>
+    {
+        // sink is initialize here to ensure it's lifetime
+        let (sink, _stream) = audio_stream::initialize_stream();
+
+        // Shared buffer (Arc + Mutex so both threads can see it)
+        let buffer = Arc::new(Mutex::new(VecDeque::new()));
+        // Creates a new pointer to a sink so all threads can access it
+        let sink = Arc::new(sink);
+
+        let (update_sender, update_receiver) = tokio::sync::mpsc::channel::<AppUpdate>(32);
+
+        // Channel for updating Ui
+        let (ui_update_sender, _): (mpsc::Sender<UiUpdate>, mpsc::Receiver<UiUpdate>) =
+            mpsc::channel(32);
+
+        let app = App::new(
+            sink,
+            update_sender.clone(),
+            TEST_AUDIO_PATH.into(),
+            buffer,
+            ui_update_sender,
+        )
+        .await?;
+
+        Ok((app, update_receiver))
+    }
+    #[tokio::test]
+    async fn test_status_home_screen() {
+        let (app, _) = initialize_app().await.expect("Failed to initialize app");
+
+        // ensure we start with the homeScreen
+        assert_eq!(app.status, Status::HomeScreen);
+    }
+    #[tokio::test]
+    async fn test_play_next() {
+        let (mut app, mut update_receiver) =
+            initialize_app().await.expect("Failed to initialize app");
+
+        let mut queue = SongQueue::new(5);
+
+        let files_names = file::read_files(TEST_AUDIO_PATH).expect("failed to read the test path");
+
+        // We need at least two songs for this test
+        assert!(files_names.len() >= 2);
+
+        queue.queue_file(files_names[0].clone());
+        queue.queue_file(files_names[1].clone());
+
+        app.song_queue = Some(queue);
+
+        app.app_update_sender
+            .send(AppUpdate::PlayNext)
+            .await
+            .expect("failed to send update");
+        if let Some(update) = update_receiver.recv().await {
+            app.handle_updates(update).await;
+        } else {
+            panic!("update not received");
+        }
+        // assert that there is a song playing
+        assert_eq!(app.sink.len(), 1);
+
+        if let Some(mut queue) = app.song_queue {
+            // assert that the next song is now first in the queue
+            assert_eq!(Some(files_names[1].clone()), queue.get_next_song())
+        }
+    }
 }

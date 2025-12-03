@@ -7,15 +7,39 @@ mod utility;
 use app::App;
 use app::AppUpdate;
 use crossterm::event::{self, Event, KeyEvent};
-use tokio::sync::mpsc::{self, Receiver};
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc::{self, Receiver, Sender};
+
+use crate::app::UiUpdate;
+use crate::ui::start_ui_loop;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // sink is initialize here to ensure it's lifetime
     let (sink, _stream) = audio_stream::initialize_stream();
+    // Shared buffer (Arc + Mutex so both threads can see it)
+    let buffer = Arc::new(Mutex::new(VecDeque::new()));
+    // Creates a new pointer to a sink so all threads can access it
+    let sink = Arc::new(sink);
 
     let (update_sender, mut update_receiver) = tokio::sync::mpsc::channel::<AppUpdate>(32);
 
-    let mut app = App::new(sink, update_sender).await?;
+    // Channel for updating Ui
+    let (ui_update_sender, ui_update_receiver): (Sender<UiUpdate>, Receiver<UiUpdate>) =
+        mpsc::channel(32);
+
+    // has to run before the initialization of the app so that app can own the variables
+    start_ui_loop(&buffer, &sink, ui_update_receiver);
+
+    let mut app = App::new(
+        sink,
+        update_sender,
+        "audio".to_string(),
+        buffer,
+        ui_update_sender,
+    )
+    .await?;
 
     let mut input_receiver = spawn_input_task().await;
 
@@ -37,6 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     ratatui::restore();
+
     Ok(())
 }
 

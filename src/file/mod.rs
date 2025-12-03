@@ -1,12 +1,10 @@
 use std::fs;
+use std::io;
 
-
-pub fn read_files(folder: &str) -> Vec<String> {
-    //TODO: This should not just unwrap
-    fs::read_dir(folder)
-        .unwrap()
+pub fn read_files(folder: &str) -> io::Result<Vec<String>> {
+    let files = fs::read_dir(folder)?
         .filter_map(|entry| {
-            let entry = entry.ok()?;
+            let entry = entry.ok()?; // Skip unreadable entries
             let path = entry.path();
             if path.is_file() {
                 path.file_name().map(|n| n.to_string_lossy().to_string())
@@ -14,40 +12,7 @@ pub fn read_files(folder: &str) -> Vec<String> {
                 None
             }
         })
-        .collect()
+        .collect();
+
+    Ok(files)
 }
-
-    /*
-    // Returns first song from the top of the queue and updates current
-    pub fn get_next_song(&mut self) -> Option<String> { 
-        if let Some(selector) =  self.forward.pop_front() {
-            if let Some(current) = self.current {
-                self.back.push_front(current);
-            }
-            if self.back.len() >= self.back_limit {
-                self.back.pop_back();
-            }
-            self.current = Some(selector);
-            Some(self.songs[selector].clone())
-        }else {
-            None
-        }
-    }
-    // Returns the first song from the previosu Queue sets its as current and adds current song to
-    // the next queue
-    pub fn get_previous_song(&mut self) -> Option<String> {
-        if let Some(selector) = self.back.pop_front() {
-            self.forward.push_front(self.current?);
-            self.current = Some(selector);
-            Some(self.songs[selector].clone())
-        }else {
-            None
-        }
-    }
-
-    pub fn queue_file(&mut self){
-        self.forward.push_back(self.selected);
-    }
-    
-*/
-

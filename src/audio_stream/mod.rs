@@ -1,8 +1,6 @@
-use rodio::decoder::DecoderBuilder;
 use rodio::source::SeekError;
 use rodio::{OutputStream, Sink, Source};
 use std::fs::File;
-use std::io::BufReader;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use symphonia::core::meta::MetadataOptions;
