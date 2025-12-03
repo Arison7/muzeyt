@@ -21,7 +21,24 @@ Originally the idea was to query songs from youtube music (thus the "yt" in the 
 youtube music api to play songs, this part of the project has been postpone for later till i can find a workaround. 
 While currently the app focues on its main purpose which is showcasing my skills rather than being an actual project
 
-## Usage (W.I.P)
+## Usage
+1. After cloning the project first step would be to include some songs in audio folder
+test songs can be quickly utilized here with: 
+```
+cp -v ./test_audio/* ./audio/
+```
+2. Build and start the app with cargo:
+```
+cargo run
+```
+
+## Testing
+Tests can be run with cargo test: 
+> [!Warning]
+> Some integrations tests might fail if the [test_audio](test_audio) doesn't have enough songs.
+```
+cargo test
+```
 
 ## Features
 
@@ -72,7 +89,7 @@ it's a tool so personally I don't see anything against using it where it's usefu
 
 
 ## To Do
-- [ ] Testing
+- [x] Testing
 - [x] Unloading app.rs
 - [ ] Making previous song be visible in queue
 - [ ] Implement full file exploration
